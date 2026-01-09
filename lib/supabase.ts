@@ -1,14 +1,13 @@
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
+import { createClient } from '@supabase/supabase-js';
 
 /**
- * مكان وضع البيانات الحقيقية:
- * 1. انتقل إلى Settings > API في لوحة تحكم Supabase.
- * 2. انسخ Project URL وضعه مكان SUPABASE_URL.
- * 3. انسخ anon/public key وضعه مكان SUPABASE_ANON_KEY.
- * ملاحظة: في بيئة الإنتاج، يفضل استخدام متغيرات البيئة (.env).
+ * عند رفع المشروع على Netlify:
+ * 1. اذهب إلى Site Configuration > Environment Variables.
+ * 2. أضف VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY.
  */
-const supabaseUrl = 'https://yjkuwwcgvpjlrchkhhsr.supabase.co'; // تم وضع الرابط الخاص بك
-const supabaseAnonKey = 'YOUR_PUBLIC_ANON_KEY_HERE'; // ضع مفتاح Public Key هنا
+// Fix: Use process.env as defined in vite.config.ts to avoid ImportMeta property 'env' errors
+const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://yjkuwwcgvpjlrchkhhsr.supabase.co';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'PLACEHOLDER_ANON_KEY';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
