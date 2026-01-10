@@ -3,7 +3,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Riddle, Difficulty } from "../types.ts";
 import { CONFIG } from "../lib/config.ts";
 
-// تهيئة الخدمة فقط إذا كان المفتاح موجوداً
 const getAiClient = () => {
   if (!CONFIG.GEMINI_API_KEY) return null;
   return new GoogleGenAI({ apiKey: CONFIG.GEMINI_API_KEY });
@@ -11,26 +10,16 @@ const getAiClient = () => {
 
 export const fetchRiddles = async (difficulty: Difficulty): Promise<Riddle[]> => {
   const ai = getAiClient();
-  
-  if (!ai) {
-    throw new Error("Gemini API Key is missing. Please check your environment variables.");
-  }
+  if (!ai) throw new Error("API Key missing");
 
-  const prompt = `أنت خبير لغوي عربي ومصمم ألغاز بارع. 
-  قم بتوليد 5 ألغاز ذكية وشيقة باللغة العربية الفصحى بمستوى صعوبة (${difficulty}).
-  قم بتقديم النتيجة بصيغة JSON حصراً بالهيكل التالي:
-  [
-    {
-      "question": "نص اللغز هنا؟",
-      "options": ["خيار 1", "خيار 2", "خيار 3", "خيار 4"],
-      "correctIndex": 0,
-      "explanation": "شرح مبسط وجميل للإجابة الصحيحة"
-    }
-  ]`;
+  const prompt = `أنت مصمم ألعاب ذكاء محترف. ولد 5 ألغاز عربية بمستوى ${difficulty}.
+  اجعل الأسئلة قصيرة ومثيرة.
+  التنسيق: JSON.
+  الحقول: question, options (4), correctIndex, explanation.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-flash-lite-latest",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -40,34 +29,38 @@ export const fetchRiddles = async (difficulty: Difficulty): Promise<Riddle[]> =>
             type: Type.OBJECT,
             properties: {
               question: { type: Type.STRING },
-              options: { 
-                type: Type.ARRAY, 
-                items: { type: Type.STRING }
-              },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
               correctIndex: { type: Type.INTEGER },
               explanation: { type: Type.STRING }
             },
             required: ["question", "options", "correctIndex", "explanation"]
           }
-        },
-        temperature: 0.8,
+        }
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No data received from Gemini");
-    
-    return JSON.parse(text);
+    return JSON.parse(response.text || "[]");
   } catch (error) {
-    console.error("Gemini Error:", error);
-    // ألغاز احتياطية لضمان استمرارية اللعب في حال حدوث خطأ تقني
-    return [
-      {
-        question: "ما هو الشيء الذي يحوي مدناً بلا بيوت، وجبالاً بلا أشجار، وبحاراً بلا سمك؟",
-        options: ["الخريطة", "الكتاب", "الحلم", "السراب"],
-        correctIndex: 0,
-        explanation: "الخريطة تمثل كل هذه التضاريس ولكنها مجرد رسم!"
-      }
-    ];
+    return [{
+      question: "ما هو الشيء الذي تذبحه وتبكي عليه؟",
+      options: ["البصل", "الثوم", "البطيخ", "الليمون"],
+      correctIndex: 0,
+      explanation: "البصل يفرز غازات تسبب الدموع عند قطعه!"
+    }];
+  }
+};
+
+export const getAIHint = async (question: string, correctAnswer: string): Promise<string> => {
+  const ai = getAiClient();
+  if (!ai) return "حاول التفكير بعمق!";
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite-latest",
+      contents: `أعطني تلميحة ذكية ومشفرة (بدون ذكر الإجابة) للغز التالي: "${question}". الإجابة هي "${correctAnswer}". اجعل التلميحة في جملة واحدة قصيرة جداً ومشوقة.`
+    });
+    return response.text?.trim() || "تفكير ذكي يقود للحل!";
+  } catch {
+    return "الإجابة أقرب مما تتصور!";
   }
 };
