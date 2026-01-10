@@ -8,6 +8,6 @@ export const isSupabaseConfigured = supabaseUrl.length > 0 && supabaseAnonKey.le
 
 // نستخدم محاولات حماية لمنع انهيار التطبيق عند الفشل في القراءة
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder-skip.supabase.co',
-  supabaseAnonKey || 'placeholder'
+  supabaseUrl || 'https://yjkuwwcgvpjlrchkhhsr.supabase.co',
+  supabaseAnonKey || 'sb_publishable_c3K5WwbYsjKLK0lpWaYnFw_YMZYWXuu'
 );
