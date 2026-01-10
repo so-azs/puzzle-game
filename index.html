@@ -14,7 +14,7 @@
       }
       body {
         font-family: 'Tajawal', sans-serif;
-        background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+        background: #020617;
         min-height: 100vh;
         margin: 0;
         color: white;
@@ -42,6 +42,15 @@
         20%, 80% { transform: translate3d(2px, 0, 0); }
         30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
         40%, 60% { transform: translate3d(4px, 0, 0); }
+      }
+
+      /* Parallax Background Layers */
+      .bg-layer {
+        position: fixed;
+        inset: -10%;
+        z-index: -1;
+        transition: transform 0.2s cubic-bezier(0.17, 0.67, 0.83, 0.67);
+        pointer-events: none;
       }
     </style>
   <script type="importmap">

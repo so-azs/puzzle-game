@@ -18,8 +18,9 @@ export const fetchRiddles = async (difficulty: Difficulty): Promise<Riddle[]> =>
   الحقول: question, options (4), correctIndex, explanation.`;
 
   try {
+    // Fixed: Using gemini-3-flash-preview for riddle generation as per guidelines for basic text tasks
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite-latest",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -55,8 +56,9 @@ export const getAIHint = async (question: string, correctAnswer: string): Promis
   if (!ai) return "حاول التفكير بعمق!";
 
   try {
+    // Fixed: Using gemini-3-flash-preview for hint generation as per guidelines for basic text tasks
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite-latest",
+      model: "gemini-3-flash-preview",
       contents: `أعطني تلميحة ذكية ومشفرة (بدون ذكر الإجابة) للغز التالي: "${question}". الإجابة هي "${correctAnswer}". اجعل التلميحة في جملة واحدة قصيرة جداً ومشوقة.`
     });
     return response.text?.trim() || "تفكير ذكي يقود للحل!";

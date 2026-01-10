@@ -5,6 +5,16 @@ export enum Difficulty {
   HARD = 'صعب'
 }
 
+export type ThemeType = 'cosmic' | 'emerald' | 'sunset' | 'midnight' | 'ocean';
+
+export interface ThemeConfig {
+  id: ThemeType;
+  name: string;
+  bg: string;
+  accent: string;
+  preview: string;
+}
+
 export interface Riddle {
   question: string;
   options: string[];
@@ -19,14 +29,14 @@ export interface Player {
   room_id: string;
   name: string;
   score: number;
-  avatar: string; // مضافة للتميز البصري
+  avatar: string;
 }
 
 export interface Room {
   id: string;
   code: string;
   status: GameState;
-  current_question: number; // مطابقة لاسم العمود المطلوب
+  current_question: number;
   difficulty: Difficulty;
   riddles?: Riddle[];
 }
