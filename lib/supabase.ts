@@ -7,15 +7,21 @@ const supabaseAnonKey = CONFIG.SUPABASE_ANON_KEY;
 
 // التحقق من صلاحية الإعدادات قبل محاولة الإنشاء
 export const isSupabaseConfigured = 
-  !!supabaseUrl && 
+  typeof supabaseUrl === 'string' && 
+  supabaseUrl.length > 0 &&
   supabaseUrl.startsWith('http') && 
-  !!supabaseAnonKey;
+  typeof supabaseAnonKey === 'string' &&
+  supabaseAnonKey.length > 0;
 
 /**
- * نقوم بإنشاء العميل فقط إذا كانت البيانات صحيحة.
- * في حال عدم وجودها، نعيد كائناً فارغاً مؤقتاً لأن App.tsx 
- * سيقوم بحظر واجهة المستخدم وعرض شاشة الإعدادات قبل استدعاء أي دالة.
+ * نقوم بإنشاء العميل فقط إذا كانت البيانات صحيحة تماماً.
+ * في حال عدم وجودها، نستخدم قيم وهمية صالحة هيكلياً لمنع الانهيار الفوري،
+ * حيث ستقوم واجهة App.tsx بحظر الوصول الفعلي وعرض شاشة الإعدادات.
  */
-export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : (null as any); 
+const PLACEHOLDER_URL = 'https://placeholder-project.supabase.co';
+const PLACEHOLDER_KEY = 'placeholder-key';
+
+export const supabase = createClient(
+  isSupabaseConfigured ? supabaseUrl : PLACEHOLDER_URL,
+  isSupabaseConfigured ? supabaseAnonKey : PLACEHOLDER_KEY
+);

@@ -1,24 +1,15 @@
 
 /**
  * إدارة مركزية لمتغيرات البيئة.
- * يدعم التسميات المختلفة لضمان التوافق مع Netlify و Vite.
+ * في Vite، يتم استبدال "process.env.VAR" حرفياً أثناء عملية البناء.
+ * استخدام الوصول الديناميكي مثل process.env[key] لا يعمل في المتصفح.
  */
 
-const getEnv = (key: string): string => {
-  // محاولة جلب القيمة من process.env (المحقونة عبر Vite define)
-  const value = process.env[key];
-  
-  if (!value || value === 'undefined' || value === 'null' || value.trim() === '') {
-    return '';
-  }
-  return value;
-};
-
 export const CONFIG = {
-  // دعم API_KEY المباشر أو المسبوق بـ VITE_
-  GEMINI_API_KEY: getEnv('API_KEY'),
-  SUPABASE_URL: getEnv('VITE_SUPABASE_URL'),
-  SUPABASE_ANON_KEY: getEnv('VITE_SUPABASE_ANON_KEY'),
+  // نستخدم الوصول المباشر ليقوم Vite باستبدال القيم أثناء البناء
+  GEMINI_API_KEY: process.env.API_KEY || '',
+  SUPABASE_URL: process.env.VITE_SUPABASE_URL || '',
+  SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || '',
 };
 
 export const isConfigComplete = (): boolean => {
