@@ -3,10 +3,19 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Riddle, Difficulty } from "../types.ts";
 import { CONFIG } from "../lib/config.ts";
 
-// استخدام المفتاح من الملف المركزي الموحد
-const ai = new GoogleGenAI({ apiKey: CONFIG.GEMINI_API_KEY });
+// تهيئة الخدمة فقط إذا كان المفتاح موجوداً
+const getAiClient = () => {
+  if (!CONFIG.GEMINI_API_KEY) return null;
+  return new GoogleGenAI({ apiKey: CONFIG.GEMINI_API_KEY });
+};
 
 export const fetchRiddles = async (difficulty: Difficulty): Promise<Riddle[]> => {
+  const ai = getAiClient();
+  
+  if (!ai) {
+    throw new Error("Gemini API Key is missing. Please check your environment variables.");
+  }
+
   const prompt = `أنت خبير لغوي عربي ومصمم ألغاز بارع. 
   قم بتوليد 5 ألغاز ذكية وشيقة باللغة العربية الفصحى بمستوى صعوبة (${difficulty}).
   قم بتقديم النتيجة بصيغة JSON حصراً بالهيكل التالي:
@@ -46,17 +55,18 @@ export const fetchRiddles = async (difficulty: Difficulty): Promise<Riddle[]> =>
     });
 
     const text = response.text;
-    if (!text) throw new Error("No data");
+    if (!text) throw new Error("No data received from Gemini");
     
     return JSON.parse(text);
   } catch (error) {
     console.error("Gemini Error:", error);
+    // ألغاز احتياطية لضمان استمرارية اللعب في حال حدوث خطأ تقني
     return [
       {
-        question: "ما هو الشيء الذي تراه في الليل ثلاث مرات وفي النهار مرة واحدة؟",
-        options: ["حرف اللام", "القمر", "النجوم", "الظلام"],
+        question: "ما هو الشيء الذي يحوي مدناً بلا بيوت، وجبالاً بلا أشجار، وبحاراً بلا سمك؟",
+        options: ["الخريطة", "الكتاب", "الحلم", "السراب"],
         correctIndex: 0,
-        explanation: "حرف اللام موجود في كلمة 'الليل' مرتين وفي كلمة 'ليلة' مرة، ولا يوجد في 'نهار'."
+        explanation: "الخريطة تمثل كل هذه التضاريس ولكنها مجرد رسم!"
       }
     ];
   }

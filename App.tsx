@@ -19,38 +19,52 @@ const App: React.FC = () => {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // 1. فحص أمان المفاتيح (Security Check)
-  if (!isConfigComplete() || !isSupabaseConfigured) {
+  // الفحص الأمني قبل أي عملية رندر أخرى
+  const configStatus = isConfigComplete();
+
+  if (!configStatus || !isSupabaseConfigured) {
     const missing = getMissingKeys();
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 text-center bg-slate-950 font-['Tajawal']">
+      <div className="min-h-screen flex items-center justify-center p-6 text-center bg-[#0f172a] font-['Tajawal']">
         <div className="bg-white/5 backdrop-blur-3xl p-10 rounded-[3rem] border border-white/10 max-w-lg shadow-2xl">
-          <div className="w-20 h-20 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
             <span className="text-4xl">🔐</span>
           </div>
-          <h2 className="text-2xl font-black text-white mb-4">تنبيه أمني: إعدادات ناقصة</h2>
+          <h2 className="text-2xl font-black text-white mb-4">يتطلب إعداد المفاتيح البرمجية</h2>
           <p className="text-indigo-200/80 mb-6 leading-relaxed">
-            لضمان عمل التطبيق بأمان، يرجى تزويد متغيرات البيئة المطلوبة. 
-            المفاتيح التالية مفقودة أو غير صالحة:
+            التطبيق يحتاج إلى الربط مع Gemini و Supabase للعمل. 
+            يرجى التأكد من إضافة المفاتيح التالية في متغيرات البيئة:
           </p>
           <div className="flex flex-wrap justify-center gap-2 mb-8">
-            {missing.map(key => (
-              <span key={key} className="bg-rose-500/10 text-rose-300 px-4 py-1.5 rounded-full text-sm border border-rose-500/20">
+            {missing.length > 0 ? missing.map(key => (
+              <span key={key} className="bg-rose-500/10 text-rose-300 px-4 py-1.5 rounded-full text-xs border border-rose-500/20">
                 {key}
               </span>
-            ))}
+            )) : <span className="text-emerald-400">تحقق من صحة الرابط الخاص بـ Supabase</span>}
           </div>
-          <div className="p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 text-xs text-indigo-300 text-right space-y-2 mb-8">
-            <p>• تأكد من ضبط <b>process.env.API_KEY</b></p>
-            <p>• تأكد من ضبط <b>VITE_SUPABASE_URL</b> و <b>VITE_SUPABASE_ANON_KEY</b></p>
+          <div className="p-5 bg-black/40 rounded-2xl border border-white/5 text-xs text-right space-y-3 mb-8">
+            <div className="flex justify-between items-center text-indigo-300">
+              <code className="bg-white/5 px-2 py-1 rounded">API_KEY</code>
+              <span>مفتاح Google Gemini</span>
+            </div>
+            <div className="flex justify-between items-center text-indigo-300">
+              <code className="bg-white/5 px-2 py-1 rounded">VITE_SUPABASE_URL</code>
+              <span>رابط مشروع Supabase</span>
+            </div>
+            <div className="flex justify-between items-center text-indigo-300">
+              <code className="bg-white/5 px-2 py-1 rounded">VITE_SUPABASE_ANON_KEY</code>
+              <span>مفتاح Anon الخاص بـ Supabase</span>
+            </div>
           </div>
-          <Button onClick={() => window.location.reload()} fullWidth>تحديث الصفحة</Button>
+          <Button onClick={() => window.location.reload()} fullWidth variant="outline">إعادة المحاولة</Button>
         </div>
       </div>
     );
   }
 
+  // بقية منطق التطبيق كما هو، سيتم تنفيذه فقط إذا نجح الفحص أعلاه
   const fetchPlayers = async (roomId: string) => {
+    if (!supabase) return;
     const { data } = await supabase
       .from('players')
       .select('*')
@@ -60,7 +74,7 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!currentRoom) return;
+    if (!currentRoom || !supabase) return;
 
     const playersChannel = supabase
       .channel(`room-players-${currentRoom.id}`)
@@ -92,10 +106,11 @@ const App: React.FC = () => {
   }, [currentRoom?.id]);
 
   const createRoom = async () => {
+    if (!supabase) return;
     setLoading(true);
     try {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const { data: room, error } = await supabase
+      const { data: room } = await supabase
         .from('rooms')
         .insert([{ code, status: 'LOBBY', current_question: 0, difficulty }])
         .select().single();
@@ -113,14 +128,14 @@ const App: React.FC = () => {
         }
       }
     } catch (e) {
-      alert('فشل إنشاء الغرفة. يرجى مراجعة إعدادات قاعدة البيانات.');
+      alert('خطأ في إنشاء الغرفة. تأكد من صحة إعدادات Supabase.');
     } finally {
       setLoading(false);
     }
   };
 
   const joinRoom = async () => {
-    if (!joinCode) return alert('أدخل رمز الغرفة');
+    if (!supabase || !joinCode) return;
     setLoading(true);
     try {
       const { data: room } = await supabase
@@ -150,7 +165,7 @@ const App: React.FC = () => {
   };
 
   const startNow = async () => {
-    if (!currentRoom) return;
+    if (!currentRoom || !supabase) return;
     setGameState('LOADING');
     try {
       const riddles = await fetchRiddles(difficulty);
@@ -165,7 +180,7 @@ const App: React.FC = () => {
   };
 
   const handleAnswer = async (index: number) => {
-    if (selectedAnswer !== null || !currentRoom?.riddles || !localPlayer) return;
+    if (!supabase || selectedAnswer !== null || !currentRoom?.riddles || !localPlayer) return;
     
     const currentRiddle = currentRoom.riddles[currentRoom.current_question];
     const correct = index === currentRiddle.correctIndex;
@@ -181,7 +196,7 @@ const App: React.FC = () => {
   };
 
   const nextQuestion = async () => {
-    if (!currentRoom || !currentRoom.riddles) return;
+    if (!supabase || !currentRoom || !currentRoom.riddles) return;
     const isLast = currentRoom.current_question >= currentRoom.riddles.length - 1;
     if (isLast) {
       await supabase.from('rooms').update({ status: 'FINISHED' }).eq('id', currentRoom.id);
@@ -248,7 +263,7 @@ const App: React.FC = () => {
         {gameState === 'LOADING' && (
           <div className="text-center py-20">
             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-            <p className="text-indigo-200 animate-pulse text-xl">جاري استحضار الألغاز...</p>
+            <p className="text-indigo-200 animate-pulse text-xl">جاري استحضار الألغاز من الذكاء الاصطناعي...</p>
           </div>
         )}
 

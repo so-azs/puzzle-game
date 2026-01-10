@@ -2,24 +2,20 @@
 import { createClient } from '@supabase/supabase-js';
 import { CONFIG } from './config.ts';
 
-// تم إزالة القيم الافتراضية الصلبة لزيادة الأمان
 const supabaseUrl = CONFIG.SUPABASE_URL;
 const supabaseAnonKey = CONFIG.SUPABASE_ANON_KEY;
 
-// التحقق من صحة البيانات قبل محاولة الاتصال
-const isValidUrl = (url: string) => {
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
-};
+// التحقق من صلاحية الإعدادات قبل محاولة الإنشاء
+export const isSupabaseConfigured = 
+  !!supabaseUrl && 
+  supabaseUrl.startsWith('http') && 
+  !!supabaseAnonKey;
 
-export const isSupabaseConfigured = isValidUrl(supabaseUrl) && supabaseAnonKey.length > 0;
-
-// إنشاء العميل فقط إذا كانت البيانات موجودة، وإلا نستخدم قيم فارغة لمنع الانهيار
-export const supabase = createClient(
-  supabaseUrl || '',
-  supabaseAnonKey || ''
-);
+/**
+ * نقوم بإنشاء العميل فقط إذا كانت البيانات صحيحة.
+ * في حال عدم وجودها، نعيد كائناً فارغاً مؤقتاً لأن App.tsx 
+ * سيقوم بحظر واجهة المستخدم وعرض شاشة الإعدادات قبل استدعاء أي دالة.
+ */
+export const supabase = isSupabaseConfigured 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : (null as any); 
