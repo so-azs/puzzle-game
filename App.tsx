@@ -1,9 +1,8 @@
-
-import React, { useState, useEffect, useRef } from 'react';
-import { Difficulty, Riddle, GameState, Player, Room } from './types';
-import { fetchRiddles } from './services/geminiService';
-import { supabase } from './lib/supabase';
-import Button from './components/Button';
+import React, { useState, useEffect } from 'react';
+import { Difficulty, Riddle, GameState, Player, Room } from './types.ts';
+import { fetchRiddles } from './services/geminiService.ts';
+import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
+import Button from './components/Button.tsx';
 
 const AVATARS = ['🦁', '🐯', '🦊', '🐨', '🐼', '🐸', '🤖', '👻'];
 
@@ -17,40 +16,46 @@ const App: React.FC = () => {
   const [isAnswered, setIsAnswered] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
 
-  // --- 1. جلب قائمة اللاعبين في غرفة معينة (REST API) ---
+  // عرض واجهة خطأ إذا لم تكن الإعدادات موجودة
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 text-center">
+        <div className="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/20 max-w-md">
+          <div className="text-5xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold mb-4">إعدادات ناقصة</h2>
+          <p className="text-indigo-200 mb-6">يرجى إضافة VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY في متغيرات البيئة بـ Netlify لتشغيل اللعبة.</p>
+          <Button onClick={() => window.location.reload()}>إعادة المحاولة</Button>
+        </div>
+      </div>
+    );
+  }
+
   const fetchPlayers = async (roomId: string) => {
-    const { data, error } = await supabase
-      .from('players')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('score', { ascending: false });
-    
-    if (data) setPlayers(data);
-    if (error) console.error("Error fetching players:", error);
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .eq('room_id', roomId)
+        .order('score', { ascending: false });
+      
+      if (data) setPlayers(data);
+      if (error) throw error;
+    } catch (err) {
+      console.error("Fetch players error:", err);
+    }
   };
 
-  // --- 2. التحديث اللحظي (Realtime) ---
   useEffect(() => {
     if (!currentRoom) return;
 
-    // الاشتراك في قناة لمراقبة تحديثات جدول اللاعبين لهذه الغرفة فقط
     const channel = supabase
       .channel(`room-players-${currentRoom.id}`)
       .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'players', 
-          filter: `room_id=eq.${currentRoom.id}` 
-        }, 
-        (payload) => {
-          // عند حدوث أي تغيير (تحديث نقاط مثلاً)، نقوم بجلب القائمة مجدداً
-          fetchPlayers(currentRoom.id);
-        }
+        { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${currentRoom.id}` }, 
+        () => fetchPlayers(currentRoom.id)
       )
       .subscribe();
 
-    // مراقبة تغيير حالة الغرفة (بدء اللعبة أو تغيير السؤال)
     const roomSub = supabase
       .channel(`room-state-${currentRoom.id}`)
       .on('postgres_changes',
@@ -72,196 +77,118 @@ const App: React.FC = () => {
     };
   }, [currentRoom?.id]);
 
-  // --- 3. إضافة لاعب جديد (REST API) ---
   const joinRoom = async () => {
-    // جلب الغرفة أولاً
-    const { data: room } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('code', joinCode.toUpperCase())
-      .single();
+    if (!joinCode) return alert('أدخل رمز الغرفة');
+    try {
+      const { data: room, error } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('code', joinCode.toUpperCase())
+        .single();
 
-    if (!room) return alert('عذراً، رمز الغرفة غير صحيح');
+      if (error || !room) return alert('رمز الغرفة غير موجود');
 
-    const playerName = prompt('أدخل اسمك المستعار:') || `لاعب ${Math.floor(Math.random() * 100)}`;
-    const avatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+      const name = prompt('اسمك:') || `لاعب ${Math.floor(Math.random()*100)}`;
+      const { data: p, error: pe } = await supabase
+        .from('players')
+        .insert([{ room_id: room.id, name, avatar: AVATARS[0], score: 0 }])
+        .select().single();
 
-    // إضافة اللاعب إلى جدول players
-    const { data: newPlayer, error } = await supabase
-      .from('players')
-      .insert([{
-        room_id: room.id,
-        name: playerName,
-        avatar: avatar,
-        score: 0
-      }])
-      .select()
-      .single();
-
-    if (newPlayer) {
-      setLocalPlayer(newPlayer);
-      setCurrentRoom(room);
-      setGameState(room.status);
-      fetchPlayers(room.id);
-    }
+      if (p) {
+        setLocalPlayer(p);
+        setCurrentRoom(room);
+        setGameState(room.status);
+      }
+    } catch (e) { alert('خطأ في الاتصال'); }
   };
 
   const createRoom = async () => {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const { data: room } = await supabase
-      .from('rooms')
-      .insert([{ code, status: 'LOBBY', current_question: 0, difficulty }])
-      .select()
-      .single();
+    try {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const { data: room, error } = await supabase
+        .from('rooms')
+        .insert([{ code, status: 'LOBBY', current_question: 0, difficulty }])
+        .select().single();
 
-    if (room) {
-      const { data: host } = await supabase
-        .from('players')
-        .insert([{ room_id: room.id, name: 'المستضيف', avatar: '👑', score: 0 }])
-        .select()
-        .single();
-      
-      if (host) {
-        setLocalPlayer(host);
-        setCurrentRoom(room);
-        setGameState('LOBBY');
-        fetchPlayers(room.id);
+      if (room) {
+        const { data: h } = await supabase
+          .from('players')
+          .insert([{ room_id: room.id, name: 'المستضيف', avatar: '👑', score: 0 }])
+          .select().single();
+        if (h) {
+          setLocalPlayer(h);
+          setCurrentRoom(room);
+          setGameState('LOBBY');
+        }
       }
-    }
-  };
-
-  // --- 4. تحديث النقاط (REST API) ---
-  const handleAnswer = async (index: number) => {
-    if (isAnswered || !localPlayer || !currentRoom || !currentRoom.riddles) return;
-    setIsAnswered(true);
-
-    const isCorrect = index === currentRoom.riddles[currentRoom.current_question].correctIndex;
-    
-    if (isCorrect) {
-      const bonus = Math.floor(timeLeft * 5);
-      const newScore = localPlayer.score + 100 + bonus;
-
-      const { data } = await supabase
-        .from('players')
-        .update({ score: newScore })
-        .eq('id', localPlayer.id)
-        .select()
-        .single();
-
-      if (data) setLocalPlayer(data);
-    }
-  };
-
-  const nextQuestion = async () => {
-    if (!currentRoom || !currentRoom.riddles) return;
-    const isLast = currentRoom.current_question >= currentRoom.riddles.length - 1;
-
-    await supabase
-      .from('rooms')
-      .update({ 
-        current_question: isLast ? currentRoom.current_question : currentRoom.current_question + 1,
-        status: isLast ? 'FINISHED' : 'PLAYING'
-      })
-      .eq('id', currentRoom.id);
+    } catch (e) { alert('تأكد من إعداد جداول قاعدة البيانات'); }
   };
 
   const startNow = async () => {
     if (!currentRoom) return;
-    const riddles = await fetchRiddles(difficulty);
-    await supabase.from('rooms').update({ status: 'PLAYING', riddles }).eq('id', currentRoom.id);
+    setGameState('LOADING');
+    try {
+      const riddles = await fetchRiddles(difficulty);
+      await supabase.from('rooms').update({ status: 'PLAYING', riddles }).eq('id', currentRoom.id);
+    } catch (e) { setGameState('LOBBY'); }
   };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl min-h-screen flex flex-col justify-center">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-black text-white mb-2">تحدي الألغاز ⚡</h1>
-        <p className="text-indigo-200">مدعوم بـ Supabase Realtime</p>
+        <h1 className="text-4xl font-black text-white mb-2 drop-shadow-md">تحدي الألغاز ⚡</h1>
+        <p className="text-indigo-200">اختبر ذكاءك في الوقت الفعلي</p>
       </div>
 
       <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-6 shadow-2xl border border-white/20">
         {gameState === 'START' && (
           <div className="space-y-6">
-            <Button onClick={createRoom} fullWidth size="lg">إنشاء غرفة</Button>
+            <Button onClick={createRoom} fullWidth size="lg">إنشاء غرفة جديدة</Button>
+            <div className="relative flex justify-center text-xs uppercase"><span className="bg-transparent px-2 text-indigo-300">أو انضم لصديق</span></div>
             <div className="flex gap-2">
               <input 
                 value={joinCode} 
                 onChange={(e) => setJoinCode(e.target.value)}
-                placeholder="رمز الغرفة..." 
-                className="flex-1 bg-white/5 border border-white/20 rounded-xl px-4 text-white"
+                placeholder="رمز الغرفة" 
+                className="flex-1 bg-white/5 border border-white/20 rounded-xl px-4 text-white text-center uppercase"
               />
               <Button onClick={joinRoom} variant="outline">انضمام</Button>
             </div>
           </div>
         )}
 
+        {gameState === 'LOADING' && (
+          <div className="text-center py-20 animate-pulse text-indigo-200">جاري توليد الألغاز...</div>
+        )}
+
         {(gameState === 'LOBBY' || gameState === 'PLAYING' || gameState === 'FINISHED') && (
           <div className="space-y-6">
             <div className="flex justify-between items-center bg-indigo-900/40 p-3 rounded-2xl">
-              <div className="text-white font-mono font-bold tracking-widest">{currentRoom?.code}</div>
+              <span className="text-white font-mono font-bold">كود: {currentRoom?.code}</span>
               <div className="flex -space-x-2">
-                {players.map(p => (
-                  <div key={p.id} className="w-8 h-8 rounded-full bg-indigo-500 border-2 border-indigo-900 flex items-center justify-center text-sm" title={p.name}>
-                    {p.avatar}
-                  </div>
-                ))}
+                {players.map(p => <div key={p.id} className="w-8 h-8 rounded-full bg-indigo-600 border border-white flex items-center justify-center">{p.avatar}</div>)}
               </div>
             </div>
 
             {gameState === 'LOBBY' && (
               <div className="text-center py-10">
-                <div className="animate-bounce text-4xl mb-4">⌛</div>
-                <h3 className="text-white text-xl font-bold">في انتظار بدء التحدي...</h3>
-                {localPlayer?.name === 'المستضيف' && (
-                  <Button onClick={startNow} className="mt-6" size="lg" variant="secondary">ابدأ الآن للجميع</Button>
-                )}
+                <h3 className="text-white text-xl font-bold">في الانتظار...</h3>
+                {localPlayer?.name === 'المستضيف' && <Button onClick={startNow} className="mt-8" fullWidth>ابدأ اللعب</Button>}
               </div>
             )}
 
             {gameState === 'PLAYING' && currentRoom?.riddles && (
-              <div className="space-y-6">
-                <div className="flex justify-between text-xs text-indigo-300 font-bold">
-                  <span>السؤال {currentRoom.current_question + 1}</span>
-                  <span>نقاطك الحالية: {localPlayer?.score}</span>
-                </div>
-                <h2 className="text-2xl font-bold text-white text-center leading-relaxed">
-                  {currentRoom.riddles[currentRoom.current_question].question}
-                </h2>
-                <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-4">
+                <h2 className="text-xl font-bold text-center">{currentRoom.riddles[currentRoom.current_question].question}</h2>
+                <div className="grid gap-2">
                   {currentRoom.riddles[currentRoom.current_question].options.map((opt, i) => (
-                    <button 
-                      key={i} 
-                      onClick={() => handleAnswer(i)}
-                      disabled={isAnswered}
-                      className={`p-4 rounded-xl border-2 text-right transition-all ${
-                        isAnswered ? 
-                        (i === currentRoom.riddles![currentRoom.current_question].correctIndex ? 'bg-emerald-500/40 border-emerald-400 text-white' : 'bg-white/5 border-white/10 text-white/40') 
-                        : 'bg-white/5 border-white/10 text-white hover:bg-white/20'
-                      }`}
-                    >
-                      {opt}
-                    </button>
+                    <button key={i} className="p-4 bg-white/5 rounded-xl border border-white/10 text-right hover:bg-white/20">{opt}</button>
                   ))}
                 </div>
-                {isAnswered && localPlayer?.name === 'المستضيف' && (
-                  <Button onClick={nextQuestion} fullWidth variant="secondary">السؤال التالي</Button>
-                )}
               </div>
             )}
-
-            {gameState === 'FINISHED' && (
-              <div className="space-y-6 text-center">
-                <h2 className="text-3xl font-black text-white">الترتيب النهائي 🏆</h2>
-                <div className="space-y-2">
-                  {players.map((p, i) => (
-                    <div key={p.id} className={`flex justify-between p-4 rounded-xl ${i === 0 ? 'bg-indigo-600' : 'bg-white/5'}`}>
-                      <div className="text-white">#{i+1} {p.avatar} {p.name}</div>
-                      <div className="text-white font-bold">{p.score}</div>
-                    </div>
-                  ))}
-                </div>
-                <Button onClick={() => window.location.reload()} fullWidth variant="outline">العودة للرئيسية</Button>
-              </div>
-            )}
+            
+            {gameState === 'FINISHED' && <div className="text-center py-10 text-2xl font-bold">انتهت اللعبة! 🏆</div>}
           </div>
         )}
       </div>
