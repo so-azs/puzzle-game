@@ -8,7 +8,6 @@ const SOUND_URLS = {
   SUCCESS: 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3',
   FAILURE: 'https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3',
   CLICK: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
-  TICK: 'https://assets.mixkit.co/active_storage/sfx/552/552-preview.mp3',
   WIN: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
   HINT: 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3'
 };

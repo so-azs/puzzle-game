@@ -60,7 +60,7 @@ const App: React.FC = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // نظام العداد التنازلي مع الأصوات
+  // نظام العداد التنازلي (تمت إزالة صوت التكتكة المزعج)
   useEffect(() => {
     if (gameState === 'PLAYING' && selectedAnswer === null) {
       timerRef.current = window.setInterval(() => {
@@ -69,7 +69,6 @@ const App: React.FC = () => {
             handleAnswer(-1);
             return 0;
           }
-          if (prev <= 6) audioService.play('TICK');
           return prev - 1;
         });
       }, 1000);
