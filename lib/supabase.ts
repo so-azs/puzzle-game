@@ -20,6 +20,6 @@ export const isSupabaseConfigured = isValidUrl(supabaseUrl) && supabaseAnonKey.l
 
 // إنشاء العميل فقط إذا كانت البيانات موجودة، وإلا نستخدم قيم فارغة لمنع الانهيار
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder'
+  supabaseUrl || '',
+  supabaseAnonKey || ''
 );
