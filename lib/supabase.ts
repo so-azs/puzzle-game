@@ -1,13 +1,25 @@
+
 import { createClient } from '@supabase/supabase-js';
+import { CONFIG } from './config.ts';
 
-// Vite يقوم بحقن هذه المتغيرات عبر Define في vite.config.ts
-const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+// تم إزالة القيم الافتراضية الصلبة لزيادة الأمان
+const supabaseUrl = CONFIG.SUPABASE_URL;
+const supabaseAnonKey = CONFIG.SUPABASE_ANON_KEY;
 
-export const isSupabaseConfigured = supabaseUrl.length > 0 && supabaseAnonKey.length > 0;
+// التحقق من صحة البيانات قبل محاولة الاتصال
+const isValidUrl = (url: string) => {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
-// نستخدم محاولات حماية لمنع انهيار التطبيق عند الفشل في القراءة
+export const isSupabaseConfigured = isValidUrl(supabaseUrl) && supabaseAnonKey.length > 0;
+
+// إنشاء العميل فقط إذا كانت البيانات موجودة، وإلا نستخدم قيم فارغة لمنع الانهيار
 export const supabase = createClient(
-  supabaseUrl || 'https://yjkuwwcgvpjlrchkhhsr.supabase.co',
-  supabaseAnonKey || 'sb_publishable_c3K5WwbYsjKLK0lpWaYnFw_YMZYWXuu'
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder'
 );

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Difficulty, Riddle, GameState, Player, Room } from './types.ts';
 import { fetchRiddles } from './services/geminiService.ts';
 import { supabase, isSupabaseConfigured } from './lib/supabase.ts';
+import { isConfigComplete, getMissingKeys } from './lib/config.ts';
 import Button from './components/Button.tsx';
 
 const AVATARS = ['🦁', '🐯', '🦊', '🐨', '🐼', '🐸', '🤖', '👻'];
@@ -18,15 +19,32 @@ const App: React.FC = () => {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // التحقق من الإعدادات
-  if (!isSupabaseConfigured) {
+  // 1. فحص أمان المفاتيح (Security Check)
+  if (!isConfigComplete() || !isSupabaseConfigured) {
+    const missing = getMissingKeys();
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 text-center">
-        <div className="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/20 max-w-md">
-          <div className="text-5xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold mb-4">إعدادات ناقصة</h2>
-          <p className="text-indigo-200 mb-6">يرجى إضافة VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY في متغيرات البيئة لتشغيل اللعبة.</p>
-          <Button onClick={() => window.location.reload()}>إعادة المحاولة</Button>
+      <div className="min-h-screen flex items-center justify-center p-6 text-center bg-slate-950 font-['Tajawal']">
+        <div className="bg-white/5 backdrop-blur-3xl p-10 rounded-[3rem] border border-white/10 max-w-lg shadow-2xl">
+          <div className="w-20 h-20 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <span className="text-4xl">🔐</span>
+          </div>
+          <h2 className="text-2xl font-black text-white mb-4">تنبيه أمني: إعدادات ناقصة</h2>
+          <p className="text-indigo-200/80 mb-6 leading-relaxed">
+            لضمان عمل التطبيق بأمان، يرجى تزويد متغيرات البيئة المطلوبة. 
+            المفاتيح التالية مفقودة أو غير صالحة:
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 mb-8">
+            {missing.map(key => (
+              <span key={key} className="bg-rose-500/10 text-rose-300 px-4 py-1.5 rounded-full text-sm border border-rose-500/20">
+                {key}
+              </span>
+            ))}
+          </div>
+          <div className="p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 text-xs text-indigo-300 text-right space-y-2 mb-8">
+            <p>• تأكد من ضبط <b>process.env.API_KEY</b></p>
+            <p>• تأكد من ضبط <b>VITE_SUPABASE_URL</b> و <b>VITE_SUPABASE_ANON_KEY</b></p>
+          </div>
+          <Button onClick={() => window.location.reload()} fullWidth>تحديث الصفحة</Button>
         </div>
       </div>
     );
@@ -44,7 +62,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentRoom) return;
 
-    // اشتراك في تغييرات اللاعبين (النقاط، الانضمام)
     const playersChannel = supabase
       .channel(`room-players-${currentRoom.id}`)
       .on('postgres_changes', 
@@ -53,7 +70,6 @@ const App: React.FC = () => {
       )
       .subscribe();
 
-    // اشتراك في تغييرات الغرفة (الحالة، السؤال الحالي)
     const roomChannel = supabase
       .channel(`room-state-${currentRoom.id}`)
       .on('postgres_changes',
@@ -62,7 +78,6 @@ const App: React.FC = () => {
           const updated = payload.new as Room;
           setCurrentRoom(updated);
           setGameState(updated.status);
-          // إعادة ضبط واجهة الإجابة عند انتقال الجميع لسؤال جديد
           setSelectedAnswer(null);
           setIsCorrect(null);
         }
@@ -98,7 +113,7 @@ const App: React.FC = () => {
         }
       }
     } catch (e) {
-      alert('فشل إنشاء الغرفة. تأكد من إعداد جداول Supabase.');
+      alert('فشل إنشاء الغرفة. يرجى مراجعة إعدادات قاعدة البيانات.');
     } finally {
       setLoading(false);
     }
@@ -108,13 +123,13 @@ const App: React.FC = () => {
     if (!joinCode) return alert('أدخل رمز الغرفة');
     setLoading(true);
     try {
-      const { data: room, error } = await supabase
+      const { data: room } = await supabase
         .from('rooms')
         .select('*')
         .eq('code', joinCode.toUpperCase())
         .single();
 
-      if (error || !room) return alert('الغرفة غير موجودة');
+      if (!room) return alert('الغرفة غير موجودة');
 
       const name = prompt('اسمك:') || `لاعب ${Math.floor(Math.random()*100)}`;
       const { data: p } = await supabase
@@ -167,9 +182,7 @@ const App: React.FC = () => {
 
   const nextQuestion = async () => {
     if (!currentRoom || !currentRoom.riddles) return;
-    
     const isLast = currentRoom.current_question >= currentRoom.riddles.length - 1;
-    
     if (isLast) {
       await supabase.from('rooms').update({ status: 'FINISHED' }).eq('id', currentRoom.id);
     } else {
@@ -187,7 +200,6 @@ const App: React.FC = () => {
       </div>
 
       <div className="bg-white/10 backdrop-blur-2xl rounded-[2.5rem] p-8 shadow-2xl border border-white/20 relative overflow-hidden">
-        {/* شريط التقدم إذا كان في وضع اللعب */}
         {gameState === 'PLAYING' && currentRoom?.riddles && (
           <div className="absolute top-0 left-0 w-full h-1 bg-white/5">
             <div 
@@ -212,8 +224,8 @@ const App: React.FC = () => {
                 <input 
                   value={joinCode} 
                   onChange={(e) => setJoinCode(e.target.value)}
-                  placeholder="رمز الغرفة (مثال: AX72)" 
-                  className="flex-1 bg-white/5 border border-white/20 rounded-2xl px-6 text-white text-center font-bold uppercase focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  placeholder="رمز الغرفة" 
+                  className="flex-1 bg-white/5 border border-white/20 rounded-2xl px-6 text-white text-center font-bold uppercase focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
                 <Button onClick={joinRoom} variant="outline" disabled={loading}>انضمام</Button>
               </div>
@@ -236,13 +248,12 @@ const App: React.FC = () => {
         {gameState === 'LOADING' && (
           <div className="text-center py-20">
             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-            <p className="text-indigo-200 animate-pulse text-xl">جاري استحضار الألغاز من الذكاء الاصطناعي...</p>
+            <p className="text-indigo-200 animate-pulse text-xl">جاري استحضار الألغاز...</p>
           </div>
         )}
 
         {(gameState === 'LOBBY' || gameState === 'PLAYING' || gameState === 'FINISHED') && (
           <div className="space-y-6">
-            {/* الهيدر العلوي في الغرفة */}
             <div className="flex justify-between items-center bg-indigo-950/40 p-4 rounded-2xl border border-white/5">
               <div>
                 <span className="text-indigo-300 text-xs block mb-1">رمز الدخول</span>
@@ -259,7 +270,6 @@ const App: React.FC = () => {
                       {p.avatar}
                     </div>
                   ))}
-                  {players.length > 4 && <div className="w-10 h-10 rounded-full bg-gray-800 border-2 border-white flex items-center justify-center text-xs">+{players.length-4}</div>}
                 </div>
               </div>
             </div>
@@ -268,21 +278,21 @@ const App: React.FC = () => {
               <div className="text-center py-10 space-y-8">
                 <div className="bg-white/5 p-6 rounded-3xl inline-block">
                   <h3 className="text-white text-2xl font-bold mb-2">انتظار اللاعبين...</h3>
-                  <p className="text-indigo-200">شارك الكود مع أصدقائك للبدء</p>
+                  <p className="text-indigo-200">شارك الكود مع أصدقائك</p>
                 </div>
                 {localPlayer?.avatar === '👑' ? (
-                  <Button onClick={startNow} fullWidth size="lg">ابدأ اللعبة الآن 🚀</Button>
+                  <Button onClick={startNow} fullWidth size="lg">ابدأ اللعبة 🚀</Button>
                 ) : (
-                  <p className="text-indigo-400 animate-bounce">في انتظار المستضيف لبدء اللعبة...</p>
+                  <p className="text-indigo-400 animate-bounce">في انتظار المستضيف...</p>
                 )}
               </div>
             )}
 
             {gameState === 'PLAYING' && currentRoom?.riddles && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="space-y-6">
                 <div className="text-center">
                   <span className="px-4 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-sm font-bold border border-indigo-500/30">
-                    لغز رقم {currentRoom.current_question + 1} من {currentRoom.riddles.length}
+                    لغز {currentRoom.current_question + 1} من {currentRoom.riddles.length}
                   </span>
                   <h2 className="text-2xl font-bold text-white mt-6 leading-relaxed">
                     {currentRoom.riddles[currentRoom.current_question].question}
@@ -296,9 +306,9 @@ const App: React.FC = () => {
                     
                     let btnClass = "p-5 rounded-2xl border text-right transition-all text-lg font-medium ";
                     if (selectedAnswer === null) {
-                      btnClass += "bg-white/5 border-white/10 hover:bg-white/20 hover:scale-[1.02] active:scale-95";
+                      btnClass += "bg-white/5 border-white/10 hover:bg-white/20";
                     } else if (isThisCorrect) {
-                      btnClass += "bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold";
+                      btnClass += "bg-emerald-500/20 border-emerald-500 text-emerald-400 font-bold shadow-emerald-500/20 shadow-lg";
                     } else if (isThisSelected && !isThisCorrect) {
                       btnClass += "bg-rose-500/20 border-rose-500 text-rose-400";
                     } else {
@@ -306,12 +316,7 @@ const App: React.FC = () => {
                     }
 
                     return (
-                      <button 
-                        key={i} 
-                        disabled={selectedAnswer !== null}
-                        onClick={() => handleAnswer(i)}
-                        className={btnClass}
-                      >
+                      <button key={i} disabled={selectedAnswer !== null} onClick={() => handleAnswer(i)} className={btnClass}>
                         <div className="flex items-center justify-between">
                           <span>{opt}</span>
                           {selectedAnswer !== null && isThisCorrect && <span>✅</span>}
@@ -325,7 +330,7 @@ const App: React.FC = () => {
                 {selectedAnswer !== null && (
                   <div className="bg-indigo-500/10 p-4 rounded-2xl border border-indigo-500/20 text-center animate-in zoom-in-95">
                     <p className="text-indigo-200 text-sm mb-4">
-                      {isCorrect ? 'أحسنت! إجابة صحيحة (+10)' : 'للأسف، إجابة غير صحيحة.'}
+                      {isCorrect ? 'أحسنت! (+10 نقاط)' : 'إجابة غير صحيحة.'}
                     </p>
                     <p className="text-white text-sm italic mb-4 opacity-80">"{currentRoom.riddles[currentRoom.current_question].explanation}"</p>
                     {localPlayer?.avatar === '👑' && (
@@ -339,29 +344,25 @@ const App: React.FC = () => {
             {gameState === 'FINISHED' && (
               <div className="text-center py-6 space-y-6">
                 <div className="text-6xl mb-4">🏆</div>
-                <h2 className="text-3xl font-black text-white">انتهت الجولة!</h2>
-                
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                <h2 className="text-3xl font-black text-white">النتائج النهائية</h2>
+                <div className="space-y-2">
                   {players.map((p, i) => (
                     <div key={p.id} className={`flex items-center justify-between p-4 rounded-2xl border ${p.id === localPlayer?.id ? 'bg-indigo-600/30 border-indigo-500' : 'bg-white/5 border-white/10'}`}>
                       <div className="flex items-center gap-3">
                         <span className="font-bold text-indigo-300 w-4">{i + 1}</span>
                         <span className="text-2xl">{p.avatar}</span>
-                        <span className="font-bold text-white">{p.name} {p.id === localPlayer?.id && '(أنت)'}</span>
+                        <span className="font-bold text-white">{p.name}</span>
                       </div>
-                      <span className="bg-white/10 px-4 py-1 rounded-full font-mono text-indigo-200">{p.score} نقطة</span>
+                      <span className="bg-white/10 px-4 py-1 rounded-full font-mono text-indigo-200">{p.score}</span>
                     </div>
                   ))}
                 </div>
-
                 <Button onClick={() => window.location.reload()} fullWidth variant="outline">العودة للرئيسية</Button>
               </div>
             )}
           </div>
         )}
       </div>
-      
-      <p className="text-center mt-8 text-indigo-400/60 text-xs">تعمل اللعبة بواسطة Google Gemini & Supabase Realtime</p>
     </div>
   );
 };

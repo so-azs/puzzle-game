@@ -1,16 +1,14 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { Riddle, Difficulty } from "../types.ts";
+import { CONFIG } from "../lib/config.ts";
 
-// يتم جلب المفتاح تلقائياً من البيئة المحيطة
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// استخدام المفتاح من الملف المركزي الموحد
+const ai = new GoogleGenAI({ apiKey: CONFIG.GEMINI_API_KEY });
 
 export const fetchRiddles = async (difficulty: Difficulty): Promise<Riddle[]> => {
   const prompt = `أنت خبير لغوي عربي ومصمم ألغاز بارع. 
   قم بتوليد 5 ألغاز ذكية وشيقة باللغة العربية الفصحى بمستوى صعوبة (${difficulty}).
-  ركز على التلاعب بالألفاظ، المعلومات الثقافية، أو الألغاز المنطقية.
-  يجب أن تكون الخيارات الأربعة متقاربة لتزيد من حماس اللعبة.
-  
   قم بتقديم النتيجة بصيغة JSON حصراً بالهيكل التالي:
   [
     {
@@ -23,7 +21,7 @@ export const fetchRiddles = async (difficulty: Difficulty): Promise<Riddle[]> =>
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview", // استخدام النموذج الاحترافي للألغاز المعقدة
+      model: "gemini-3-pro-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -43,29 +41,22 @@ export const fetchRiddles = async (difficulty: Difficulty): Promise<Riddle[]> =>
             required: ["question", "options", "correctIndex", "explanation"]
           }
         },
-        temperature: 0.8, // زيادة الإبداع في توليد الألغاز
+        temperature: 0.8,
       }
     });
 
-    const text = response.text; // الوصول للنص كخاصية مباشرة
-    if (!text) throw new Error("لم يتم استلام بيانات من الذكاء الاصطناعي");
+    const text = response.text;
+    if (!text) throw new Error("No data");
     
     return JSON.parse(text);
   } catch (error) {
     console.error("Gemini Error:", error);
-    // قائمة ألغاز احتياطية في حال حدوث خطأ في الاتصال
     return [
       {
-        question: "ما هو الشيء الذي له أسنان ولا يعض؟",
-        options: ["المشط", "المنشار", "المقص", "الفم"],
+        question: "ما هو الشيء الذي تراه في الليل ثلاث مرات وفي النهار مرة واحدة؟",
+        options: ["حرف اللام", "القمر", "النجوم", "الظلام"],
         correctIndex: 0,
-        explanation: "المشط له أسنان لتسريح الشعر لكنه لا يعض!"
-      },
-      {
-        question: "ما هو الشيء الذي يكتب ولا يقرأ؟",
-        options: ["القلم", "الكتاب", "الورقة", "الكمبيوتر"],
-        correctIndex: 0,
-        explanation: "القلم هو الذي يكتب الكلمات ولكنه لا يستطيع قراءتها."
+        explanation: "حرف اللام موجود في كلمة 'الليل' مرتين وفي كلمة 'ليلة' مرة، ولا يوجد في 'نهار'."
       }
     ];
   }
