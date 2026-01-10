@@ -214,7 +214,6 @@ const App: React.FC = () => {
         const progress = Math.min((p.score / maxScore) * 100, 100);
         return (
           <div key={p.id} className="relative group">
-            {/* Fixed: Line 217 - Use --tw-ring-color for Tailwind ring and cast to CSSProperties to fix TypeScript error */}
             <div className={`flex items-center justify-between p-3 rounded-2xl glass border border-white/5 transition-all duration-500 overflow-hidden ${i === 0 && p.score > 0 ? 'ring-2' : ''}`} style={i === 0 && p.score > 0 ? { '--tw-ring-color': activeTheme.accent } as React.CSSProperties : {}}>
               {/* Progress Bar Background */}
               <div 
@@ -510,8 +509,9 @@ const App: React.FC = () => {
         </div>
       </div>
       
-      <div className="fixed bottom-4 text-white/10 text-[10px] font-bold uppercase tracking-[1em] pointer-events-none">
-        Intelligence Word Puzzle Engine v2.2
+      {/* Footer / Copyright */}
+      <div className="fixed bottom-4 text-white/20 text-xs font-bold pointer-events-none text-center">
+        جميع الحقوق محفوظة لـ Game Dev Path 2026 ©
       </div>
     </div>
   );
