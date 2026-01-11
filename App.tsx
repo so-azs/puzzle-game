@@ -633,7 +633,7 @@ const App: React.FC = () => {
       </div>
       
       <div className="fixed bottom-4 text-white/20 text-xs font-bold pointer-events-none text-center">
-        جميع الحقوق محفوظة لـ Game Dev Path 2026 ©
+        جميع الحقوق محفوظة 2026 ©
       </div>
     </div>
   );
