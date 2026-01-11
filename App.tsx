@@ -36,7 +36,6 @@ const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
   
-  // لطور خمن الشخصية
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [currentInput, setCurrentInput] = useState('');
   const [questionCount, setQuestionCount] = useState(0);
@@ -104,17 +103,21 @@ const App: React.FC = () => {
   };
 
   const fetchPlayers = async (roomId: string) => {
-    if (!supabase) return;
-    const { data } = await supabase
-      .from('players')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('score', { ascending: false });
-    if (data) setPlayers(data);
+    if (!supabase || !isSupabaseConfigured) return;
+    try {
+      const { data } = await supabase
+        .from('players')
+        .select('*')
+        .eq('room_id', roomId)
+        .order('score', { ascending: false });
+      if (data) setPlayers(data);
+    } catch (e) {
+      console.error("Fetch Players Error:", e);
+    }
   };
 
   useEffect(() => {
-    if (!currentRoom || !supabase) return;
+    if (!currentRoom || !supabase || !isSupabaseConfigured) return;
 
     const playersChannel = supabase
       .channel(`room-players-${currentRoom.id}`)
@@ -128,7 +131,7 @@ const App: React.FC = () => {
         if (updated.status === 'FINISHED' && gameState !== 'FINISHED') audioService.play('WIN');
         setCurrentRoom(updated);
         setGameState(updated.status);
-        setGameMode(updated.game_mode);
+        setGameMode(updated.game_mode || 'RIDDLES');
         setSelectedAnswer(null);
         setIsCorrect(null);
         setHint(null);
@@ -143,36 +146,105 @@ const App: React.FC = () => {
   }, [currentRoom?.id, gameState]);
 
   const createRoom = async () => {
-    if (!supabase) return;
+    if (!supabase || !isSupabaseConfigured) {
+      alert("قاعدة البيانات غير مهيأة بشكل صحيح.");
+      return;
+    }
+    
     audioService.play('CLICK');
     setLoading(true);
+    
     try {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const { data: room } = await supabase.from('rooms').insert([{ code, status: 'LOBBY', current_question: 0, difficulty, game_mode: gameMode }]).select().single();
+      
+      // إدخال الغرفة الجديدة
+      const { data: room, error: roomError } = await supabase
+        .from('rooms')
+        .insert([{ 
+          code, 
+          status: 'LOBBY', 
+          current_question: 0, 
+          difficulty, 
+          game_mode: gameMode 
+        }])
+        .select()
+        .single();
+
+      if (roomError) {
+        // إذا كان الخطأ متعلقاً بعدم وجود عمود game_mode
+        if (roomError.message?.includes("column \"game_mode\" of relation \"rooms\" does not exist")) {
+          throw new Error("يرجى إضافة عمود 'game_mode' لجدول 'rooms' في Supabase SQL Editor.");
+        }
+        throw roomError;
+      }
+
       if (room) {
         const name = prompt('اختر اسمك المستعار:') || 'القائد';
-        const { data: p } = await supabase.from('players').insert([{ room_id: room.id, name, avatar: '👑', score: 0 }]).select().single();
-        if (p) { setLocalPlayer(p); setCurrentRoom(room); setGameState('LOBBY'); }
+        const { data: p, error: pError } = await supabase
+          .from('players')
+          .insert([{ 
+            room_id: room.id, 
+            name, 
+            avatar: '👑', 
+            score: 0 
+          }])
+          .select()
+          .single();
+        
+        if (pError) throw pError;
+        
+        if (p) {
+          setLocalPlayer(p);
+          setCurrentRoom(room);
+          setGameState('LOBBY');
+        }
       }
-    } catch (e) { alert('خطأ في الاتصال'); } finally { setLoading(false); }
+    } catch (e: any) {
+      console.error("CRITICAL: Room Creation Error:", e);
+      alert(`فشل إنشاء الغرفة: ${e.message || 'خطأ غير متوقع'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const joinRoom = async () => {
-    if (!supabase || !joinCode) return;
+    if (!supabase || !joinCode || !isSupabaseConfigured) return;
     audioService.play('CLICK');
     setLoading(true);
     try {
-      const { data: room } = await supabase.from('rooms').select('*').eq('code', joinCode.toUpperCase()).single();
-      if (!room) return alert('الغرفة غير موجودة');
+      const { data: room, error: roomError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('code', joinCode.toUpperCase())
+        .single();
+
+      if (roomError || !room) throw new Error('الغرفة غير موجودة');
+
       const name = prompt('ما هو اسمك؟') || `لاعب ${Math.floor(Math.random()*100)}`;
-      const { data: p } = await supabase.from('players').insert([{ room_id: room.id, name, avatar: AVATARS[Math.floor(Math.random()*AVATARS.length)], score: 0 }]).select().single();
+      const { data: p, error: pError } = await supabase
+        .from('players')
+        .insert([{ 
+          room_id: room.id, 
+          name, 
+          avatar: AVATARS[Math.floor(Math.random()*AVATARS.length)], 
+          score: 0 
+        }])
+        .select()
+        .single();
+
+      if (pError) throw pError;
+
       if (p) { 
         setLocalPlayer(p); 
         setCurrentRoom(room); 
         setGameState(room.status); 
-        setGameMode(room.game_mode);
+        setGameMode(room.game_mode || 'RIDDLES');
       }
-    } catch (e) { alert('رمز غير صحيح'); } finally { setLoading(false); }
+    } catch (e: any) {
+      alert(e.message || 'فشل الانضمام');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const startNow = async () => {
@@ -182,15 +254,20 @@ const App: React.FC = () => {
     try {
       if (gameMode === 'RIDDLES') {
         const riddles = await fetchRiddles(difficulty);
-        await supabase.from('rooms').update({ status: 'PLAYING', riddles, current_question: 0 }).eq('id', currentRoom.id);
+        const { error } = await supabase.from('rooms').update({ status: 'PLAYING', riddles, current_question: 0 }).eq('id', currentRoom.id);
+        if (error) throw error;
       } else {
-        await supabase.from('rooms').update({ status: 'PLAYING' }).eq('id', currentRoom.id);
-        // تهيئة الدردشة محلياً في البداية
+        const { error } = await supabase.from('rooms').update({ status: 'PLAYING' }).eq('id', currentRoom.id);
+        if (error) throw error;
         const chat = createGuessWhoChat();
         chatRef.current = chat;
         setChatHistory([{ role: 'model', text: 'أهلاً بك! لقد اخترت شخصية سرية في ذهني. ابدأ بطرح أسئلتك، وسأعطيك تلميحات ذكية. تذكر، لديك 20 سؤالاً فقط!' }]);
       }
-    } catch (e) { setGameState('LOBBY'); }
+    } catch (e) {
+      console.error(e);
+      setGameState('LOBBY');
+      alert('حدث خطأ أثناء بدء اللعبة');
+    }
   };
 
   const handleAnswer = async (index: number) => {
@@ -223,8 +300,7 @@ const App: React.FC = () => {
 
     try {
       const result = await chatRef.current.sendMessage({ message: userMsg });
-      // Use result.text property as per guidelines and add fallback for string requirement
-      const modelResponse = result.text || 'عذراً، لم أستطع توليد رد.';
+      const modelResponse = result.text || 'لم أستطع فهم السؤال، حاول مجدداً.';
       setChatHistory(prev => [...prev, { role: 'model', text: modelResponse }]);
       
       if (modelResponse.includes('✅')) {
@@ -242,7 +318,7 @@ const App: React.FC = () => {
       }
 
     } catch (e) {
-      setChatHistory(prev => [...prev, { role: 'model', text: 'عذراً، حدث خطأ في الاتصال بالسحابة الذهنية. حاول مجدداً.' }]);
+      setChatHistory(prev => [...prev, { role: 'model', text: 'عذراً، حدث خطأ في التواصل مع الذكاء الاصطناعي.' }]);
     } finally {
       setLoading(false);
     }
@@ -260,10 +336,14 @@ const App: React.FC = () => {
     if (!supabase || !currentRoom || !currentRoom.riddles) return;
     audioService.play('CLICK');
     const isLast = currentRoom.current_question >= currentRoom.riddles.length - 1;
-    if (isLast) {
-      await supabase.from('rooms').update({ status: 'FINISHED' }).eq('id', currentRoom.id);
-    } else {
-      await supabase.from('rooms').update({ current_question: currentRoom.current_question + 1 }).eq('id', currentRoom.id);
+    try {
+      if (isLast) {
+        await supabase.from('rooms').update({ status: 'FINISHED' }).eq('id', currentRoom.id);
+      } else {
+        await supabase.from('rooms').update({ current_question: currentRoom.current_question + 1 }).eq('id', currentRoom.id);
+      }
+    } catch (e) {
+      alert('خطأ في الانتقال');
     }
   };
 
@@ -373,12 +453,31 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Button onClick={createRoom} size="lg" className="h-20 text-2xl" disabled={loading} style={{ backgroundColor: activeTheme.accent }}>
-                    {loading ? '...' : 'تحدي جديد 👑'}
+                  <Button 
+                    onClick={createRoom} 
+                    size="lg" 
+                    className="h-20 text-2xl relative" 
+                    disabled={loading} 
+                    style={{ backgroundColor: activeTheme.accent }}
+                  >
+                    {loading ? (
+                      <span className="flex items-center gap-3">
+                        <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                        جاري الإنشاء...
+                      </span>
+                    ) : 'تحدي جديد 👑'}
                   </Button>
                   <div className="flex gap-2">
-                    <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="رمز الغرفة" className="flex-1 glass border-white/10 rounded-2xl px-6 text-white text-center font-black text-xl uppercase tracking-widest focus:ring-2 outline-none" style={{ '--tw-ring-color': activeTheme.accent } as React.CSSProperties} />
-                    <Button onClick={joinRoom} variant="outline" disabled={loading}>انضمام</Button>
+                    <input 
+                      value={joinCode} 
+                      onChange={(e) => setJoinCode(e.target.value)} 
+                      placeholder="رمز الغرفة" 
+                      className="flex-1 glass border-white/10 rounded-2xl px-6 text-white text-center font-black text-xl uppercase tracking-widest focus:ring-2 outline-none" 
+                      style={{ '--tw-ring-color': activeTheme.accent } as React.CSSProperties} 
+                    />
+                    <Button onClick={joinRoom} variant="outline" disabled={loading}>
+                      {loading && joinCode ? 'جاري...' : 'انضمام'}
+                    </Button>
                   </div>
                 </div>
                 
