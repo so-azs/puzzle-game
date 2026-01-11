@@ -5,6 +5,8 @@ export enum Difficulty {
   HARD = 'صعب'
 }
 
+export type GameMode = 'RIDDLES' | 'GUESS_WHO';
+
 export type ThemeType = 'cosmic' | 'emerald' | 'sunset' | 'midnight' | 'ocean';
 
 export interface ThemeConfig {
@@ -38,5 +40,11 @@ export interface Room {
   status: GameState;
   current_question: number;
   difficulty: Difficulty;
+  game_mode: GameMode;
   riddles?: Riddle[];
+}
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
 }
